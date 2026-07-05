@@ -28,11 +28,11 @@ def keep_alive():
 # ==========================================
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Commands(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 grok_client = OpenAI(
     api_key=os.getenv("XAI_API_KEY"),
-    base_url="https://api.xai.ai/v1",
+    base_url="https://api.x.ai/v1",
 )
 
 GRACE_PERSONALITY = """
