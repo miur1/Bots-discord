@@ -1,9 +1,17 @@
 import os
+import sys
 import discord
 from discord.ext import commands
-from openai import OpenAI
+from openai import AsyncOpenAI
 from flask import Flask
 from threading import Thread
+
+# ==========================================
+# 0. VALIDASI ENV VARS
+# ==========================================
+missing = [k for k in ("DISCORD_TOKEN", "XAI_API_KEY") if not os.getenv(k)]
+if missing:
+    sys.exit(f"[ERROR] Environment variable(s) belum diset: {', '.join(missing)}")
 
 # ==========================================
 # 1. SETUP WEB SERVER MINI (Biars Gak Sleep)
@@ -15,7 +23,6 @@ def home():
     return "Bot Grace sudah online dan siap ngobrol! 🚀"
 
 def run_web_server():
-    # Render butuh port dinamis, default ke 8080 kalau lokal
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -30,7 +37,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-grok_client = OpenAI(
+grok_client = AsyncOpenAI(
     api_key=os.getenv("XAI_API_KEY"),
     base_url="https://api.x.ai/v1",
 )
@@ -52,16 +59,20 @@ async def on_message(message):
         return
 
     if bot.user.mentioned_in(message):
-        user_prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
-        
+        # Handle both <@id> and <@!id> mention formats
+        user_prompt = message.content
+        for mention_fmt in (f'<@{bot.user.id}>', f'<@!{bot.user.id}>'):
+            user_prompt = user_prompt.replace(mention_fmt, '')
+        user_prompt = user_prompt.strip()
+
         if not user_prompt:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
             return
 
         async with message.channel.typing():
             try:
-                response = grok_client.chat.completions.create(
-                    model="grok-4.3",
+                response = await grok_client.chat.completions.create(
+                    model="grok-4",
                     messages=[
                         {"role": "system", "content": GRACE_PERSONALITY},
                         {"role": "user", "content": user_prompt}
@@ -81,4 +92,3 @@ async def on_message(message):
 if __name__ == "__main__":
     keep_alive()  # Jalankan web server di background
     bot.run(os.getenv('DISCORD_TOKEN'))
-    
