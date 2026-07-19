@@ -65,10 +65,24 @@ async def on_message(message):
             user_prompt = user_prompt.replace(mention_fmt, '')
         user_prompt = user_prompt.strip()
 
-        if "kamu" in user_prompt.lower():
-            await message.reply("aku gabut")
-        else:
-            await message.reply("ya kenapa sayang😋")
+        if not user_prompt:
+            await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
+            return
+
+        async with message.channel.typing():
+            try:
+                response = await grok_client.chat.completions.create(
+                    model="grok-4",
+                    messages=[
+                        {"role": "system", "content": GRACE_PERSONALITY},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                )
+                bot_reply = response.choices[0].message.content
+                await message.reply(bot_reply)
+            except Exception as e:
+                print(f"Error: {e}")
+                await message.reply("Aduh, otak aku lagi ngeblank nih. Coba lagi ya! 😵")
 
     await bot.process_commands(message)
 
