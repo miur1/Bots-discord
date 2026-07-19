@@ -65,10 +65,6 @@ async def on_message(message):
             user_prompt = user_prompt.replace(mention_fmt, '')
         user_prompt = user_prompt.strip()
 
-        if not user_prompt:
-            await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
-            return
-
         if "kamu" in user_prompt.lower():
             await message.reply("aku gabut")
         else:
