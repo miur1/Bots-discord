@@ -41,6 +41,9 @@ grok_client = AsyncGroq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
+user_memories = {}
+MAX_MEMORY = 10
+
 GRACE_PERSONALITY = """
 Kamu adalah AI bernama Miu si femboy imut.
 
@@ -77,6 +80,12 @@ Tujuan:
 - Memberikan informasi dengan cara yang santai dan mudah dipahami
 """
 
+# ==========================================
+# Variabel untuk menyimpan ingatan Grace
+# ==========================================
+user_memories = {}
+MAX_MEMORY = 5 # Jumlah pasang percakapan yang diingat (5 tanya + 5 jawab)
+
 @bot.event
 async def on_ready():
     print(f'Bot Miu si femboy imut {bot.user} udah siap di Render! 🤖✨')
@@ -87,31 +96,49 @@ async def on_message(message):
         return
 
     if bot.user.mentioned_in(message):
-        # Gunakan 'content' lalu hilangkan mention dengan cara yang lebih aman
-        # Kita pakai replace untuk menghapus mention ID bot
-        clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '')
-        user_prompt = clean_content.strip()
+        # 1. Bersihkan pesan dari mention
+        clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
 
-        # Debugging: Cek di terminal apakah user_prompt sudah benar isinya
-        print(f"DEBUG - User Prompt: {user_prompt}")
-
-        if not user_prompt:
+        if not clean_content:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
             return
 
+        # 2. Setup memori untuk user yang nge-chat
+        user_id = message.author.id
+        if user_id not in user_memories:
+            user_memories[user_id] = [] # Buat list kosong kalau user baru pertama kali chat
+
+        # 3. Tambahkan pesan user ke dalam memori
+        user_memories[user_id].append({"role": "user", "content": clean_content})
+
+        # 4. Batasi panjang memori (dikali 2 karena 1 pasang = 1 user + 1 assistant)
+        if len(user_memories[user_id]) > (MAX_MEMORY * 2):
+            # Ambil yang paling baru saja, buang yang paling lama
+            user_memories[user_id] = user_memories[user_id][-(MAX_MEMORY * 2):]
+
+        # 5. Siapkan prompt yang akan dikirim ke API (System + History)
+        api_messages = [{"role": "system", "content": GRACE_PERSONALITY}]
+        api_messages.extend(user_memories[user_id])
+
         async with message.channel.typing():
             try:
+                # 6. Kirim seluruh ingatan ke Groq
                 response = await grok_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": GRACE_PERSONALITY},
-                        {"role": "user", "content": user_prompt} # Sekarang ini sudah bersih
-                    ]
+                    messages=api_messages
                 )
                 bot_reply = response.choices[0].message.content
+                
+                # 7. Simpan jawaban Grace ke dalam memori supaya dia ingat apa yang dia ucapkan
+                user_memories[user_id].append({"role": "assistant", "content": bot_reply})
+                
                 await message.reply(bot_reply)
             except Exception as e:
                 print(f"Error: {e}")
+                # Hapus pesan terakhir user dari memori jika terjadi error (biar gak nyangkut)
+                if len(user_memories[user_id]) > 0:
+                    user_memories[user_id].pop()
+                    
                 await message.reply("Aduh, otak aku lagi ngeblank nih. Coba lagi ya! 😵")
 
     await bot.process_commands(message)
