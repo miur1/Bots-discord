@@ -72,7 +72,7 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 response = await grok_client.chat.completions.create(
-                    model="grok-4",
+                    model="grok-4.5",
                     messages=[
                         {"role": "system", "content": GRACE_PERSONALITY},
                         {"role": "user", "content": user_prompt}
