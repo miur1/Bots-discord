@@ -58,11 +58,13 @@ async def on_message(message):
         return
 
     if bot.user.mentioned_in(message):
-        # Handle both <@id> and <@!id> mention formats
-        user_prompt = message.content
-        for mention_fmt in (f'<@{bot.user.id}>', f'<@!{bot.user.id}>'):
-            user_prompt = user_prompt.replace(mention_fmt, '')
-        user_prompt = user_prompt.strip()
+        # Gunakan 'content' lalu hilangkan mention dengan cara yang lebih aman
+        # Kita pakai replace untuk menghapus mention ID bot
+        clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '')
+        user_prompt = clean_content.strip()
+
+        # Debugging: Cek di terminal apakah user_prompt sudah benar isinya
+        print(f"DEBUG - User Prompt: {user_prompt}")
 
         if not user_prompt:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
@@ -74,7 +76,7 @@ async def on_message(message):
                     model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": GRACE_PERSONALITY},
-                        {"role": "user", "content": user_prompt}
+                        {"role": "user", "content": user_prompt} # Sekarang ini sudah bersih
                     ]
                 )
                 bot_reply = response.choices[0].message.content
