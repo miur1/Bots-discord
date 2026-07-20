@@ -20,7 +20,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot Grace sudah online dan siap ngobrol! 🚀"
+    return "Bot Miu si femboy imut sudah online dan siap ngobrol! 🚀"
 
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
@@ -42,7 +42,7 @@ grok_client = AsyncGroq(
 )
 
 GRACE_PERSONALITY = """
-Kamu adalah AI bernama Grace.
+Kamu adalah AI bernama Miu si femboy imut.
 
 Kepribadian:
 
@@ -79,7 +79,7 @@ Tujuan:
 
 @bot.event
 async def on_ready():
-    print(f'Bot Grace {bot.user} udah siap di Render! 🤖✨')
+    print(f'Bot Miu si femboy imut {bot.user} udah siap di Render! 🤖✨')
 
 @bot.event
 async def on_message(message):
