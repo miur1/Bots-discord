@@ -37,7 +37,7 @@ def keep_alive():
 # ==========================================
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='Miu ', intents=intents)
 
 grok_client = AsyncGroq(
     api_key=os.getenv("GROQ_API_KEY"),
@@ -182,7 +182,7 @@ async def hapus(ctx, jumlah: int):
 @hapus.error
 async def hapus_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Eh, kasih tau dong berapa pesan yang mau dihapus! Contoh: `!hapus 10` 🧐")
+        await ctx.send("Eh, kasih tau dong berapa pesan yang mau dihapus! Contoh: `Miu hapus 10` 🧐")
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send("Eits, kamu nggak punya izin buat hapus pesan di server ini! 😝")
     elif isinstance(error, commands.BadArgument):
