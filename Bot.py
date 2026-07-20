@@ -9,7 +9,7 @@ from threading import Thread
 # ==========================================
 # 0. VALIDASI ENV VARS
 # ==========================================
-missing = [k for k in ("DISCORD_TOKEN", "XAI_API_KEY") if not os.getenv(k)]
+missing = [k for k in ("DISCORD_TOKEN", "GROQ_API_KEY") if not os.getenv(k)]
 if missing:
     sys.exit(f"[ERROR] Environment variable(s) belum diset: {', '.join(missing)}")
 
@@ -38,8 +38,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 grok_client = AsyncOpenAI(
-    api_key=os.getenv("XAI_API_KEY"),
-    base_url="https://api.x.ai/v1",
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
 )
 
 GRACE_PERSONALITY = """
@@ -72,7 +72,7 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 response = await grok_client.chat.completions.create(
-                    model="grok-4.5",
+                    model="meta-llama/llama-4-maverick-17b-128e-instruct",
                     messages=[
                         {"role": "system", "content": GRACE_PERSONALITY},
                         {"role": "user", "content": user_prompt}
