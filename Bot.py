@@ -1,12 +1,13 @@
 import os
 import sys
+import re
+import asyncio
+import aiohttp
 import discord
 from discord.ext import commands
 from groq import AsyncGroq
 from flask import Flask
 from threading import Thread
-import asyncio
-import aiohttp
 
 # ==========================================
 # 0. VALIDASI ENV VARS
@@ -16,7 +17,7 @@ if missing:
     sys.exit(f"[ERROR] Environment variable(s) belum diset: {', '.join(missing)}")
 
 # ==========================================
-# 1. SETUP WEB SERVER MINI (Biars Gak Sleep)
+# 1. SETUP WEB SERVER MINI (Biar Gak Sleep)
 # ==========================================
 app = Flask('')
 
@@ -33,7 +34,7 @@ def keep_alive():
     t.start()
 
 # ==========================================
-# 2. SETUP DISCORD BOT & GROK
+# 2. SETUP DISCORD BOT & GROQ
 # ==========================================
 intents = discord.Intents.default()
 intents.message_content = True
@@ -44,7 +45,8 @@ grok_client = AsyncGroq(
 )
 
 user_memories = {}
-MAX_MEMORY = 5
+MAX_MEMORY = 5  # Jumlah pasang percakapan yang diingat (5 tanya + 5 jawab)
+alarm_tasks = {}
 
 GRACE_PERSONALITY = """
 Kamu adalah AI bernama Miu si femboy imut.
@@ -83,11 +85,25 @@ Tujuan:
 """
 
 # ==========================================
-# Variabel untuk menyimpan ingatan Grace
+# ALARM
 # ==========================================
-user_memories = {}
-MAX_MEMORY = 5 # Jumlah pasang percakapan yang diingat (5 tanya + 5 jawab)
+async def jalankan_alarm(channel, user, durasi_detik, angka_waktu, satuan_waktu):
+    try:
+        await channel.send(f"Sip! Miu set timer buat {user.mention} selama {angka_waktu} {satuan_waktu}. Siap-siap aku teror nanti! 🕒😈")
+        await asyncio.sleep(durasi_detik)
 
+        while True:
+            for _ in range(5):
+                await channel.send(f"🔔 {user.mention} WOY! WAKTUNYA HABIS! BANGUUUN!")
+                await asyncio.sleep(1.5)
+            await asyncio.sleep(60)
+
+    except asyncio.CancelledError:
+        pass
+
+# ==========================================
+# KEEP-ALIVE PING (setiap 15 menit)
+# ==========================================
 async def keep_alive_ping():
     await bot.wait_until_ready()
     port = int(os.environ.get("PORT", 8080))
@@ -99,11 +115,14 @@ async def keep_alive_ping():
                     print(f"[Keep-Alive] Ping sukses — status {resp.status}")
         except Exception as e:
             print(f"[Keep-Alive] Ping gagal: {e}")
-        await asyncio.sleep(15 * 60)  # Tunggu 15 menit
+        await asyncio.sleep(15 * 60)
 
+# ==========================================
+# EVENTS
+# ==========================================
 @bot.event
 async def on_ready():
-    print(f'Bot Miu si femboy imut {bot.user} udah siap di Render! 🤖✨')
+    print(f'Bot Miu si femboy imut {bot.user} udah siap! 🤖✨')
     bot.loop.create_task(keep_alive_ping())
 
 @bot.event
@@ -111,74 +130,99 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    isi_pesan = message.content.lower()
+
+    # ==========================================
+    # LOGIKA 1: Mematikan atau Membatalkan Alarm
+    # ==========================================
+    if "iya miu" in isi_pesan or "ga jadi miu" in isi_pesan:
+        if message.author.id in alarm_tasks:
+            alarm_tasks[message.author.id].cancel()
+            del alarm_tasks[message.author.id]
+
+            if "iya miu" in isi_pesan:
+                await message.reply("Nah, gitu dong nyahut! 😌 Alarm udah Miu matiin ya.")
+            else:
+                await message.reply("Yee labil! Yaudah timer-nya Miu batalin. 🙄")
+            return
+
+    # ==========================================
+    # LOGIKA 2: Bikin Timer Baru
+    # ==========================================
+    timer_match = re.search(r'miu buat timer (\d+)\s*(detik|menit|jam)', isi_pesan)
+    if timer_match:
+        angka = int(timer_match.group(1))
+        satuan = timer_match.group(2)
+
+        if satuan == 'detik':
+            durasi = angka
+        elif satuan == 'menit':
+            durasi = angka * 60
+        elif satuan == 'jam':
+            durasi = angka * 3600
+
+        if message.author.id in alarm_tasks:
+            await message.reply("Eh tunggu dulu! Kamu kan masih punya timer yang lagi jalan. Matiin dulu yang lama (ketik `ga jadi Miu`), baru deh bikin yang baru! 🙄")
+            return
+
+        task = asyncio.create_task(jalankan_alarm(message.channel, message.author, durasi, angka, satuan))
+        alarm_tasks[message.author.id] = task
+        return
+
+    # ==========================================
+    # LOGIKA 3: Chat AI (kalau di-mention)
+    # ==========================================
     if bot.user.mentioned_in(message):
-        # 1. Bersihkan pesan dari mention
         clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
 
         if not clean_content:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
             return
 
-        # 2. Setup memori untuk user yang nge-chat
         user_id = message.author.id
         if user_id not in user_memories:
-            user_memories[user_id] = [] # Buat list kosong kalau user baru pertama kali chat
+            user_memories[user_id] = []
 
-        # 3. Tambahkan pesan user ke dalam memori
         user_memories[user_id].append({"role": "user", "content": clean_content})
 
-        # 4. Batasi panjang memori (dikali 2 karena 1 pasang = 1 user + 1 assistant)
         if len(user_memories[user_id]) > (MAX_MEMORY * 2):
-            # Ambil yang paling baru saja, buang yang paling lama
             user_memories[user_id] = user_memories[user_id][-(MAX_MEMORY * 2):]
 
-        # 5. Siapkan prompt yang akan dikirim ke API (System + History)
         api_messages = [{"role": "system", "content": GRACE_PERSONALITY}]
         api_messages.extend(user_memories[user_id])
 
         async with message.channel.typing():
             try:
-                # 6. Kirim seluruh ingatan ke Groq
                 response = await grok_client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages
                 )
                 bot_reply = response.choices[0].message.content
-                
-                # 7. Simpan jawaban Grace ke dalam memori supaya dia ingat apa yang dia ucapkan
                 user_memories[user_id].append({"role": "assistant", "content": bot_reply})
-                
                 await message.reply(bot_reply)
             except Exception as e:
                 print(f"Error: {e}")
-                # Hapus pesan terakhir user dari memori jika terjadi error (biar gak nyangkut)
                 if len(user_memories[user_id]) > 0:
                     user_memories[user_id].pop()
-                    
                 await message.reply("Aduh, otak aku lagi ngeblank nih. Coba lagi ya! 😵")
 
     await bot.process_commands(message)
 
-from discord.ext import commands
-
-# Tambahkan command ini di bawah variabel bot atau sebelum bot.run()
+# ==========================================
+# COMMANDS
+# ==========================================
 @bot.command()
-@commands.has_permissions(manage_messages=True) # Memastikan cuma orang yang punya izin yang bisa pakai
+@commands.has_permissions(manage_messages=True)
 async def hapus(ctx, jumlah: int):
     """Menghapus sejumlah pesan di channel"""
-    # Batasi maksimal pesan yang bisa dihapus agar bot tidak kerja terlalu berat
     if jumlah > 100:
         await ctx.send("Waduh, kebanyakan! Maksimal hapus 100 pesan aja ya sekali jalan. 😵")
         return
 
-    # jumlah + 1 supaya pesan perintah '!hapus' yang kamu ketik juga ikut terhapus
     deleted = await ctx.channel.purge(limit=jumlah + 1)
-    
-    # Kirim notifikasi sukses, lalu pesannya akan hilang sendiri dalam 5 detik
-    notif = await ctx.send(f"🧹 Bip boop! Grace udah menyingkirkan {len(deleted)-1} pesan buat kamu.")
+    notif = await ctx.send(f"🧹 Bip boop! Miu udah menyingkirkan {len(deleted)-1} pesan buat kamu.")
     await notif.delete(delay=5)
 
-# (Opsional) Penanganan error kalau command-nya diketik salah
 @hapus.error
 async def hapus_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -187,11 +231,10 @@ async def hapus_error(ctx, error):
         await ctx.send("Eits, kamu nggak punya izin buat hapus pesan di server ini! 😝")
     elif isinstance(error, commands.BadArgument):
         await ctx.send("Jumlah pesannya harus pakai angka ya, jangan pakai huruf!")
-        
 
 # ==========================================
 # 3. JALANKAN WEB SERVER & BOT
 # ==========================================
 if __name__ == "__main__":
-    keep_alive()  # Jalankan web server di background
+    keep_alive()
     bot.run(os.getenv('DISCORD_TOKEN'))
