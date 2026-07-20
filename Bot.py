@@ -42,7 +42,7 @@ grok_client = AsyncGroq(
 )
 
 user_memories = {}
-MAX_MEMORY = 10
+MAX_MEMORY = 5
 
 GRACE_PERSONALITY = """
 Kamu adalah AI bernama Miu si femboy imut.
