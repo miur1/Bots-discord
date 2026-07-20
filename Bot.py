@@ -2,7 +2,7 @@ import os
 import sys
 import discord
 from discord.ext import commands
-from openai import AsyncOpenAI
+from groq import AsyncGroq
 from flask import Flask
 from threading import Thread
 
@@ -37,9 +37,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-grok_client = AsyncOpenAI(
+grok_client = AsyncGroq(
     api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1",
 )
 
 GRACE_PERSONALITY = """
@@ -72,7 +71,7 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 response = await grok_client.chat.completions.create(
-                    model="meta-llama/llama-4-maverick-17b-128e-instruct",
+                    model="llama3-70b-8192",
                     messages=[
                         {"role": "system", "content": GRACE_PERSONALITY},
                         {"role": "user", "content": user_prompt}
