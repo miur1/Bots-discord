@@ -159,6 +159,36 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+from discord.ext import commands
+
+# Tambahkan command ini di bawah variabel bot atau sebelum bot.run()
+@bot.command()
+@commands.has_permissions(manage_messages=True) # Memastikan cuma orang yang punya izin yang bisa pakai
+async def hapus(ctx, jumlah: int):
+    """Menghapus sejumlah pesan di channel"""
+    # Batasi maksimal pesan yang bisa dihapus agar bot tidak kerja terlalu berat
+    if jumlah > 100:
+        await ctx.send("Waduh, kebanyakan! Maksimal hapus 100 pesan aja ya sekali jalan. 😵")
+        return
+
+    # jumlah + 1 supaya pesan perintah '!hapus' yang kamu ketik juga ikut terhapus
+    deleted = await ctx.channel.purge(limit=jumlah + 1)
+    
+    # Kirim notifikasi sukses, lalu pesannya akan hilang sendiri dalam 5 detik
+    notif = await ctx.send(f"🧹 Bip boop! Grace udah menyingkirkan {len(deleted)-1} pesan buat kamu.")
+    await notif.delete(delay=5)
+
+# (Opsional) Penanganan error kalau command-nya diketik salah
+@hapus.error
+async def hapus_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Eh, kasih tau dong berapa pesan yang mau dihapus! Contoh: `!hapus 10` 🧐")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("Eits, kamu nggak punya izin buat hapus pesan di server ini! 😝")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("Jumlah pesannya harus pakai angka ya, jangan pakai huruf!")
+        
+
 # ==========================================
 # 3. JALANKAN WEB SERVER & BOT
 # ==========================================
