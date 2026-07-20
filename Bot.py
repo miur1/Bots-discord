@@ -5,6 +5,8 @@ from discord.ext import commands
 from groq import AsyncGroq
 from flask import Flask
 from threading import Thread
+import asyncio
+import aiohttp
 
 # ==========================================
 # 0. VALIDASI ENV VARS
@@ -86,9 +88,23 @@ Tujuan:
 user_memories = {}
 MAX_MEMORY = 5 # Jumlah pasang percakapan yang diingat (5 tanya + 5 jawab)
 
+async def keep_alive_ping():
+    await bot.wait_until_ready()
+    port = int(os.environ.get("PORT", 8080))
+    url = f"http://127.0.0.1:{port}/"
+    while not bot.is_closed():
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    print(f"[Keep-Alive] Ping sukses — status {resp.status}")
+        except Exception as e:
+            print(f"[Keep-Alive] Ping gagal: {e}")
+        await asyncio.sleep(15 * 60)  # Tunggu 15 menit
+
 @bot.event
 async def on_ready():
     print(f'Bot Miu si femboy imut {bot.user} udah siap di Render! 🤖✨')
+    bot.loop.create_task(keep_alive_ping())
 
 @bot.event
 async def on_message(message):
