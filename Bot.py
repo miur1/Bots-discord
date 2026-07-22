@@ -9,6 +9,8 @@ from discord.ext import commands
 from groq import AsyncGroq
 from flask import Flask
 from threading import Thread
+from datetime import datetime, timedelta
+
 
 # ==========================================
 # 0. VALIDASI ENV VARS
@@ -48,6 +50,8 @@ grok_client = AsyncGroq(
 user_memories = {}
 MAX_MEMORY = 5  # Jumlah pasang percakapan yang diingat (5 tanya + 5 jawab)
 alarm_tasks = {}
+
+user_stats = {}
 
 GRACE_PERSONALITY = """
 Kamu adalah AI bernama Miu si femboy imut.
@@ -132,6 +136,32 @@ async def on_message(message):
         return
 
     isi_pesan = message.content.lower()
+
+        # ==========================================
+    # LOGIKA LEVELING & PENDAPATAN GOLD
+    # ==========================================
+    user_id = message.author.id
+    
+    # Bikin profil baru kalau user belum terdaftar
+    if user_id not in user_stats:
+        user_stats[user_id] = {"xp": 0, "level": 1, "gold": 0, "inventory": [], "last_daily": None}
+    
+    # Setiap kirim pesan dapat 10 XP
+    user_stats[user_id]["xp"] += 10
+    
+    # Rumus batas XP naik level: (Level x 100)
+    batas_xp = user_stats[user_id]["level"] * 100
+    
+    if user_stats[user_id]["xp"] >= batas_xp:
+        user_stats[user_id]["level"] += 1
+        user_stats[user_id]["xp"] = 0 # Reset XP setelah naik level
+        
+        # Hadiah Gold setiap naik level
+        hadiah_gold = user_stats[user_id]["level"] * 50
+        user_stats[user_id]["gold"] += hadiah_gold
+        
+        await message.channel.send(f"🎉 Wuih! {message.author.mention} rajin banget nge-chat, sekarang naik ke **Level {user_stats[user_id]['level']}**! Miu kasih hadiah **{hadiah_gold} Gold** buat modal gacha! 💰")
+        
 
     # ==========================================
     # LOGIKA 1: Mematikan atau Membatalkan Alarm
@@ -233,9 +263,100 @@ async def hapus_error(ctx, error):
     elif isinstance(error, commands.BadArgument):
         await ctx.send("Jumlah pesannya harus pakai angka ya, jangan pakai huruf!")
 
+    # ==========================================
+# COMMAND SISTEM GOLD & GACHA
+# ==========================================
+
+@bot.command()
+async def profil(ctx):
+    """Melihat level, gold, dan tas kamu"""
+    user_id = ctx.author.id
+    if user_id not in user_stats:
+        await ctx.send("Kamu belum punya profil. Ngobrol dulu dong di sini biar dapet XP! 😝")
+        return
+        
+    stats = user_stats[user_id]
+    
+    teks = f"**📊 Profil {ctx.author.name}**\n"
+    teks += f"⭐ Level: {stats['level']}\n"
+    teks += f"✨ XP: {stats['xp']} / {stats['level'] * 100}\n"
+    teks += f"💰 Gold: {stats['gold']}G\n"
+    
+    isi_tas = ", ".join(stats['inventory']) if stats['inventory'] else "Kosong melompong, gacha makanya!"
+    teks += f"🎒 Tas: {isi_tas}"
+    
+    await ctx.send(teks)
+
+@bot.command()
+async def daily(ctx):
+    """Klaim jatah Gold gratis setiap 24 jam"""
+    user_id = ctx.author.id
+    if user_id not in user_stats:
+        user_stats[user_id] = {"xp": 0, "level": 1, "gold": 0, "inventory": [], "last_daily": None}
+    
+    sekarang = datetime.now()
+    waktu_terakhir = user_stats[user_id]["last_daily"]
+    
+    # Cek apakah sudah lewat 24 jam sejak klaim terakhir
+    if waktu_terakhir and (sekarang - waktu_terakhir) < timedelta(days=1):
+        sisa_waktu = timedelta(days=1) - (sekarang - waktu_terakhir)
+        jam, sisa = divmod(sisa_waktu.seconds, 3600)
+        menit, detik = divmod(sisa, 60)
+        await ctx.send(f"Eits, maruk! Kamu udah ambil jatah hari ini. Tunggu **{jam} jam {menit} menit** lagi ya! ⏳")
+        return
+        
+    # Berikan 150 Gold gratis
+    user_stats[user_id]["gold"] += 150
+    user_stats[user_id]["last_daily"] = sekarang
+    await ctx.send(f"✅ Mantap! {ctx.author.mention} berhasil klaim **150 Gold** harian. Jangan dipakai judi semua ya! 💸")
+
+@bot.command()
+async def gacha(ctx):
+    """Gacha item menggunakan Gold"""
+    user_id = ctx.author.id
+    harga_gacha = 100 # Harga per tarikan
+    
+    if user_id not in user_stats or user_stats[user_id]["gold"] < harga_gacha:
+        await ctx.send(f"Yee, miskin! Gold kamu kurang. Butuh **{harga_gacha} Gold** buat gacha. Ketik `!daily` dulu sana! 😝")
+        return
+
+    # Potong Gold
+    user_stats[user_id]["gold"] -= harga_gacha
+
+    # Daftar Item (Rarity, Nama Item, Persentase Peluang)
+    pool_hadiah = [
+        ("Ampas", "Batu Kerikil", 45),
+        ("Common", "Kopi Sachet", 30),
+        ("Rare", "Voucher Diskon Makanan", 15),
+        ("Epic", "Gitar Akustik", 8),
+        ("Legendary", "Pedang Naga Hitam", 2)
+    ]
+    
+    # Ekstrak item dan peluang
+    daftar_item = [item[1] for item in pool_hadiah]
+    peluang = [item[2] for item in pool_hadiah]
+    
+    # Undi item pakai random.choices
+    hasil_gacha = random.choices(daftar_item, weights=peluang, k=1)[0]
+    rarity = next(item[0] for item in pool_hadiah if item[1] == hasil_gacha)
+    
+    # Simpan ke tas
+    user_stats[user_id]["inventory"].append(hasil_gacha)
+
+    # Reaksi Miu sesuai Rarity
+    if rarity == "Ampas":
+        await ctx.send(f"🎰 {ctx.author.mention} menarik tuas gacha...\nDan dapetnya... **{hasil_gacha}**. Sabar ya, namanya juga ampas. 🤣 *(Sisa Gold: {user_stats[user_id]['gold']}G)*")
+    elif rarity == "Legendary":
+        await ctx.send(f"🎰 {ctx.author.mention} menarik tuas gacha...\n🌟 WOAH! HOKI GILA! Kamu dapet item **[LEGENDARY]**: **{hasil_gacha}**!!! 🎉 *(Sisa Gold: {user_stats[user_id]['gold']}G)*")
+    else:
+        await ctx.send(f"🎰 {ctx.author.mention} menarik tuas gacha...\nLumayan lah! Kamu dapet item **[{rarity}]**: **{hasil_gacha}**! ✨ *(Sisa Gold: {user_stats[user_id]['gold']}G)*")
+        
+
 # ==========================================
 # 3. JALANKAN WEB SERVER & BOT
 # ==========================================
 if __name__ == "__main__":
     keep_alive()
     bot.run(os.getenv('DISCORD_TOKEN'))
+
+
