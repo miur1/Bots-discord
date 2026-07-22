@@ -203,8 +203,8 @@ async def on_message(message):
     # ==========================================
     # LOGIKA 3: Chat AI (kalau di-mention)
     # ==========================================
-    if bot.user.mentioned_in(message):
-        clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
+    if bot.user and bot.user.mentioned_in(message):
+    clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
 
         if not clean_content:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
@@ -314,10 +314,10 @@ async def daily(ctx):
 async def gacha(ctx):
     """Gacha item menggunakan Gold"""
     user_id = ctx.author.id
-    harga_gacha = 100 # Harga per tarikan
+    harga_gacha = 10 # Harga per tarikan
     
     if user_id not in user_stats or user_stats[user_id]["gold"] < harga_gacha:
-        await ctx.send(f"Yee, miskin! Gold kamu kurang. Butuh **{harga_gacha} Gold** buat gacha. Ketik `!daily` dulu sana! 😝")
+        await ctx.send(f"Yee, miskin! Gold kamu kurang. Butuh **{harga_gacha} Gold** buat gacha. Ketik `Miu daily` dulu sana! 😝")
         return
 
     # Potong Gold
@@ -350,6 +350,50 @@ async def gacha(ctx):
         await ctx.send(f"🎰 {ctx.author.mention} menarik tuas gacha...\n🌟 WOAH! HOKI GILA! Kamu dapet item **[LEGENDARY]**: **{hasil_gacha}**!!! 🎉 *(Sisa Gold: {user_stats[user_id]['gold']}G)*")
     else:
         await ctx.send(f"🎰 {ctx.author.mention} menarik tuas gacha...\nLumayan lah! Kamu dapet item **[{rarity}]**: **{hasil_gacha}**! ✨ *(Sisa Gold: {user_stats[user_id]['gold']}G)*")
+
+@bot.command()
+async def jual(ctx, *, nama_item: str = None):
+    """Menjual item dari tas untuk mendapatkan Gold"""
+    user_id = ctx.author.id
+    
+    # 1. Validasi: Punya profil dan isi tas nggak kosong?
+    if user_id not in user_stats or not user_stats[user_id]["inventory"]:
+        await ctx.send("Tas kamu aja kosong melompong atau kamu belum terdaftar. Ngobrol dulu sana biar dapet item! 😝")
+        return
+        
+    # 2. Validasi: Menyebutkan nama item nggak?
+    if not nama_item:
+        await ctx.send("Eh, sebutin dong nama item yang mau dijual! Contoh: `Miu jual Batu Kerikil` 🧐")
+        return
+
+    # 3. Daftar Harga Item (Silakan disesuaikan harganya)
+    harga_item = {
+        "Batu Kerikil": 10,
+        "Kopi Sachet": 30,
+        "Voucher Diskon Makanan": 80,
+        "Gitar Akustik": 300,
+        "Pedang Naga Hitam": 1000
+    }
+
+    # 4. Cari item di tas (dibuat tidak sensitif huruf besar/kecil biar user gampang ketiknya)
+    item_ditemukan = None
+    for item_di_tas in user_stats[user_id]["inventory"]:
+        if item_di_tas.lower() == nama_item.lower():
+            item_ditemukan = item_di_tas
+            break # Berhenti mencari kalau sudah ketemu 1
+
+    # 5. Eksekusi penjualan
+    if item_ditemukan:
+        # Hapus 1 item dari tas (kalau punya 2 Batu Kerikil, cuma 1 yang kejual)
+        user_stats[user_id]["inventory"].remove(item_ditemukan)
+        
+        # Ambil harga item dari daftar, kalau entah kenapa itemnya nggak ada di daftar, hargai 5 Gold
+        harga = harga_item.get(item_ditemukan, 5)
+        user_stats[user_id]["gold"] += harga
+        
+        await ctx.send(f"🛍️ Laku! {ctx.author.mention} menjual **{item_ditemukan}** ke pasar loak dan dapet **{harga} Gold**. (Total: {user_stats[user_id]['gold']}G) 💰")
+    else:
+        await ctx.send(f"Hadeh, halu ya? Kamu nggak punya item **{nama_item}** di dalam tas. Cek dulu pakai `Miu profil`! 🙄")
         
 
 # ==========================================
