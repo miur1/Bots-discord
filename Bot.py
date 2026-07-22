@@ -206,7 +206,7 @@ async def on_message(message):
     if bot.user and bot.user.mentioned_in(message):
         clean_content = message.content.replace(f'<@{bot.user.id}>', '').replace(f'<@!{bot.user.id}>', '').strip()
 
-     if not clean_content:
+        if not clean_content:
             await message.reply("Kenapa manggil-manggil? Kangen ya? 😜")
             return
 
